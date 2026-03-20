@@ -1,0 +1,24 @@
+<Solution>
+  <Folder Name="/Client/" />
+  <Folder Name="/Server/" />
+  <Folder Name="/Server/AppHost/">
+    <Project Path="src/Server/AppHost/ClawFlgma.AppHost.csproj" />
+    <Project Path="src/Server/ServiceDefaults/ClawFlgma.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/Server/Gateway/">
+    <Project Path="src/Server/Gateway/ClawFlgma.ApiGateway/ApiGateway/ClawFlgma.ApiGateway.csproj" />
+  </Folder>
+  <Folder Name="/Server/Services/">
+    <Project Path="src/Server/Services/AIService/ClawFlgma.AIService.csproj" />
+    <Project Path="src/Server/Services/AssetService/ClawFlgma.AssetService.csproj" />
+    <Project Path="src/Server/Services/AuthService/ClawFlgma.AuthService.csproj" />
+    <Project Path="src/Server/Services/CollaborationService/ClawFlgma.CollaborationService.csproj" />
+    <Project Path="src/Server/Services/DesignService/ClawFlgma.DesignService.csproj" />
+    <Project Path="src/Server/Services/NotificationService/ClawFlgma.NotificationService.csproj" />
+    <Project Path="src/Server/Services/ProjectService/ClawFlgma.ProjectService.csproj" />
+    <Project Path="src/Server/Services/UserService/ClawFlgma.UserService.csproj" />
+  </Folder>
+  <Folder Name="/Server/Shared/">
+    <Project Path="src/Server/Shared/ClawFlgma.Shared/ClawFlgma.Shared.csproj" />
+  </Folder>
+</Solution>

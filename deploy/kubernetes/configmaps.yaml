@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clawflgma-config
+  namespace: clawflgma
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  JWT__Issuer: "ClawFlgma"
+  JWT__Audience: "ClawFlgma.Users"
+  JWT__ExpirationMinutes: "1440"
+  MINIO__Endpoint: "http://minio:9000"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: clawflgma
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    scrape_configs:
+      - job_name: 'clawflgma'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - clawflgma
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__

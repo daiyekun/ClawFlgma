@@ -1,0 +1,191 @@
+# ClawFlgma CI/CD Pipeline
+# GitLab CI/CD Configuration
+
+stages:
+  - build
+  - test
+  - docker
+  - deploy
+  - notify
+
+variables:
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay2
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  LATEST_TAG: $CI_REGISTRY_IMAGE:latest
+  KUBECONFIG: /tmp/kubeconfig
+
+# ==================== Build Stage ====================
+
+build:auth-service:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  script:
+    - cd src/Services/AuthService
+    - dotnet restore
+    - dotnet build --configuration Release --no-restore
+  artifacts:
+    paths:
+      - src/Services/AuthService/bin/
+      - src/Services/AuthService/obj/
+    expire_in: 1 day
+  only:
+    changes:
+      - src/Services/AuthService/**/*
+      - src/Shared/**/*
+
+build:design-service:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  script:
+    - cd src/Services/DesignService
+    - dotnet restore
+    - dotnet build --configuration Release --no-restore
+  artifacts:
+    paths:
+      - src/Services/DesignService/bin/
+      - src/Services/DesignService/obj/
+    expire_in: 1 day
+  only:
+    changes:
+      - src/Services/DesignService/**/*
+      - src/Shared/**/*
+
+build:collab-service:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  script:
+    - cd src/Services/CollaborationService
+    - dotnet restore
+    - dotnet build --configuration Release --no-restore
+  artifacts:
+    paths:
+      - src/Services/CollaborationService/bin/
+      - src/Services/CollaborationService/obj/
+    expire_in: 1 day
+  only:
+    changes:
+      - src/Services/CollaborationService/**/*
+      - src/Shared/**/*
+
+# ==================== Test Stage ====================
+
+test:unit:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  services:
+    - postgres:17-alpine
+    - redis:7-alpine
+  variables:
+    POSTGRES_USER: clawflgma
+    POSTGRES_PASSWORD: test_password
+    POSTGRES_DB: clawflgma_test
+    ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=clawflgma_test;Username=clawflgma;Password=test_password"
+    ConnectionStrings__Redis: "redis:6379"
+  script:
+    - dotnet test --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+  coverage: '/Code Coverage: (\d+\.\d+)%/'
+  artifacts:
+    reports:
+      junit: "**/TestResults/*.trx"
+    paths:
+      - "**/TestResults/**"
+    expire_in: 1 week
+  dependencies:
+    - build:auth-service
+    - build:design-service
+    - build:collab-service
+
+# ==================== Docker Stage ====================
+
+docker:build-and-push:
+  stage: docker
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - docker build -f src/Services/AuthService/Dockerfile -t $IMAGE_TAG-auth-service -t $LATEST_TAG-auth-service .
+    - docker build -f src/Services/DesignService/Dockerfile -t $IMAGE_TAG-design-service -t $LATEST_TAG-design-service .
+    - docker build -f src/Services/CollaborationService/Dockerfile -t $IMAGE_TAG-collab-service -t $LATEST_TAG-collab-service .
+    - docker push $IMAGE_TAG-auth-service
+    - docker push $LATEST_TAG-auth-service
+    - docker push $IMAGE_TAG-design-service
+    - docker push $LATEST_TAG-design-service
+    - docker push $IMAGE_TAG-collab-service
+    - docker push $LATEST_TAG-collab-service
+  dependencies:
+    - test:unit
+  only:
+    - main
+    - develop
+
+# ==================== Deploy Stage ====================
+
+deploy:staging:
+  stage: deploy
+  image: alpine/k8s:1.29.3
+  before_script:
+    - mkdir -p $(dirname $KUBECONFIG)
+    - echo "$KUBE_CONFIG_STAGING" | base64 -d > $KUBECONFIG
+  script:
+    - kubectl config use-context staging
+    - kubectl set image deployment/auth-service auth-service=$IMAGE_TAG-auth-service -n clawflgma-staging
+    - kubectl set image deployment/design-service design-service=$IMAGE_TAG-design-service -n clawflgma-staging
+    - kubectl set image deployment/collab-service collab-service=$IMAGE_TAG-collab-service -n clawflgma-staging
+    - kubectl rollout status deployment/auth-service -n clawflgma-staging
+    - kubectl rollout status deployment/design-service -n clawflgma-staging
+    - kubectl rollout status deployment/collab-service -n clawflgma-staging
+  environment:
+    name: staging
+    url: https://staging.clawflgma.com
+  dependencies:
+    - docker:build-and-push
+  only:
+    - develop
+
+deploy:production:
+  stage: deploy
+  image: alpine/k8s:1.29.3
+  before_script:
+    - mkdir -p $(dirname $KUBECONFIG)
+    - echo "$KUBE_CONFIG_PRODUCTION" | base64 -d > $KUBECONFIG
+  script:
+    - kubectl config use-context production
+    - kubectl set image deployment/auth-service auth-service=$IMAGE_TAG-auth-service -n clawflgma
+    - kubectl set image deployment/design-service design-service=$IMAGE_TAG-design-service -n clawflgma
+    - kubectl set image deployment/collab-service collab-service=$IMAGE_TAG-collab-service -n clawflgma
+    - kubectl rollout status deployment/auth-service -n clawflgma
+    - kubectl rollout status deployment/design-service -n clawflgma
+    - kubectl rollout status deployment/collab-service -n clawflgma
+  environment:
+    name: production
+    url: https://api.clawflgma.com
+  dependencies:
+    - docker:build-and-push
+  only:
+    - main
+  when: manual
+
+# ==================== Notify Stage ====================
+
+notify:success:
+  stage: notify
+  image: alpine:latest
+  script:
+    - echo "Deployment successful!"
+  dependencies:
+    - deploy:staging
+    - deploy:production
+  only:
+    - main
+    - develop
+
+notify:failure:
+  stage: notify
+  image: alpine:latest
+  script:
+    - echo "Deployment failed!"
+  when: on_failure

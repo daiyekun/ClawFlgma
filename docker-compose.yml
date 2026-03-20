@@ -1,0 +1,195 @@
+version: '3.8'
+
+services:
+  # 基础设施
+  postgres:
+    image: postgres:17-alpine
+    container_name: clawflgma-postgres
+    environment:
+      POSTGRES_USER: clawflgma
+      POSTGRES_PASSWORD: clawflgma_pass
+      POSTGRES_DB: clawflgma
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clawflgma"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: clawflgma-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: clawflgma-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: clawflgma
+      RABBITMQ_DEFAULT_PASS: clawflgma_pass
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: clawflgma-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: clawflgma
+      MONGO_INITDB_ROOT_PASSWORD: clawflgma_pass
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo-express:
+    image: mongo-express:1
+    container_name: clawflgma-mongo-express
+    environment:
+      ME_CONFIG_MONGODB_URL: "mongodb://clawflgma:clawflgma_pass@mongodb:27017/"
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+
+  minio:
+    image: minio/minio:latest
+    container_name: clawflgma-minio
+    environment:
+      MINIO_ROOT_USER: clawflgma
+      MINIO_ROOT_PASSWORD: clawflgma_pass
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # 微服务
+  auth-service:
+    build:
+      context: .
+      dockerfile: src/Services/AuthService/Dockerfile
+    container_name: clawflgma-auth
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=clawflgma;Username=clawflgma;Password=clawflgma_pass
+      - ConnectionStrings__Redis=redis:6379
+    ports:
+      - "5001:5001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  design-service:
+    build:
+      context: .
+      dockerfile: src/Services/DesignService/Dockerfile
+    container_name: clawflgma-design
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__MongoDB=mongodb://clawflgma:clawflgma_pass@mongodb:27017/?authSource=admin
+      - ConnectionStrings__Redis=redis:6379
+    ports:
+      - "5004:5004"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  collab-service:
+    build:
+      context: .
+      dockerfile: src/Services/CollaborationService/Dockerfile
+    container_name: clawflgma-collab
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__MongoDB=mongodb://clawflgma:clawflgma_pass@mongodb:27017/?authSource=admin
+      - ConnectionStrings__Redis=redis:6379
+    ports:
+      - "5005:5005"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: src/Gateway/ApiGateway/Dockerfile
+    container_name: clawflgma-gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - auth-service
+      - design-service
+      - collab-service
+
+  # 监控
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: clawflgma-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: clawflgma-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  mongodb-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:

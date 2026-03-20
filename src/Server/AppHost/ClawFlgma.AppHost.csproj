@@ -1,0 +1,23 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.3">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>5cc62fb8-89d3-4de3-af06-ae8a3bdbae63</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Gateway\ClawFlgma.ApiGateway\ApiGateway\ClawFlgma.ApiGateway.csproj" />
+    <ProjectReference Include="..\Services\AIService\ClawFlgma.AIService.csproj" />
+    <ProjectReference Include="..\Services\AssetService\ClawFlgma.AssetService.csproj" />
+    <ProjectReference Include="..\Services\AuthService\ClawFlgma.AuthService.csproj" />
+    <ProjectReference Include="..\Services\CollaborationService\ClawFlgma.CollaborationService.csproj" />
+    <ProjectReference Include="..\Services\DesignService\ClawFlgma.DesignService.csproj" />
+    <ProjectReference Include="..\Services\NotificationService\ClawFlgma.NotificationService.csproj" />
+    <ProjectReference Include="..\Services\ProjectService\ClawFlgma.ProjectService.csproj" />
+    <ProjectReference Include="..\Services\UserService\ClawFlgma.UserService.csproj" />
+  </ItemGroup>
+
+</Project>
