@@ -19,5 +19,8 @@
     <ProjectReference Include="..\Services\ProjectService\ClawFlgma.ProjectService.csproj" />
     <ProjectReference Include="..\Services\UserService\ClawFlgma.UserService.csproj" />
   </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
+	</ItemGroup>
 
 </Project>
